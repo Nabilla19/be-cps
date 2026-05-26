@@ -18,7 +18,33 @@ const initDB = async () => {
     `);
     try { await pool.query('ALTER TABLE users ADD COLUMN email VARCHAR(255) UNIQUE'); } catch (e) {}
     try { await pool.query("ALTER TABLE users ADD COLUMN role VARCHAR(50) DEFAULT 'user'"); } catch (e) {}
+    try { await pool.query("ALTER TABLE users ADD COLUMN birth_date VARCHAR(50)"); } catch (e) {}
+    try { await pool.query("ALTER TABLE users ADD COLUMN gender VARCHAR(50)"); } catch (e) {}
     
+    // Create channels table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS channels (
+        id SERIAL PRIMARY KEY,
+        slug VARCHAR(255) UNIQUE NOT NULL,
+        name VARCHAR(255) NOT NULL,
+        description TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Seed initial channels if table is empty
+    const seedCount = await pool.query('SELECT COUNT(*) FROM channels');
+    if (parseInt(seedCount.rows[0].count) === 0) {
+      await pool.query(`
+        INSERT INTO channels (slug, name, description) VALUES
+        ('curhat-umum', '💬-curhat-umum', 'Saluran bebas untuk membagikan keluh kesah dan cerita apa saja.'),
+        ('stres-kecemasan', '🧠-stres-kecemasan', 'Tempat berbagi cerita seputar stres, kepanikan, dan kecemasan Anda.'),
+        ('insomnia-tidur', '🌙-insomnia-tidur', 'Mengalami masalah tidur? Yuk, saling bercerita dan berbagi tips di sini.'),
+        ('pelukan-hangat', '🫂-pelukan-hangat', 'Bila sedang sedih atau terluka, dapatkan pelukan hangat dan simpati di sini.')
+      `);
+      console.log('Seeded initial channels successfully');
+    }
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS posts (
         id SERIAL PRIMARY KEY,
@@ -27,6 +53,11 @@ const initDB = async () => {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       )
     `);
+
+    // Add channel_slug column to posts table
+    try { 
+      await pool.query("ALTER TABLE posts ADD COLUMN channel_slug VARCHAR(255) DEFAULT 'curhat-umum'"); 
+    } catch (e) {}
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS moods (

@@ -41,6 +41,62 @@ exports.deletePost = async (req, res) => {
   }
 };
 
+exports.bulkDeletePosts = async (req, res) => {
+  const { ids } = req.body;
+  if (!ids || !Array.isArray(ids) || ids.length === 0) {
+    return res.status(400).json({ error: 'Post IDs are required' });
+  }
+  try {
+    await pool.query('DELETE FROM posts WHERE id = ANY($1::int[])', [ids]);
+    res.json({ message: 'Selected posts deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
+exports.createChannel = async (req, res) => {
+  const { slug, name, description } = req.body;
+  if (!slug || !name) return res.status(400).json({ error: 'Slug and Name are required' });
+
+  // Clean slug
+  const cleanSlug = slug.toLowerCase().trim().replace(/[^a-z0-9-_]/g, '-');
+
+  try {
+    const result = await pool.query(
+      'INSERT INTO channels (slug, name, description) VALUES ($1, $2, $3) RETURNING *',
+      [cleanSlug, name, description || '']
+    );
+    res.status(201).json(result.rows[0]);
+  } catch (err) {
+    if (err.code === '23505') {
+      return res.status(400).json({ error: 'Channel with this slug already exists' });
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
+exports.deleteChannel = async (req, res) => {
+  const { slug } = req.params;
+  if (slug === 'curhat-umum') {
+    return res.status(400).json({ error: 'Cannot delete the default general channel' });
+  }
+  try {
+    // Delete all posts in this channel first
+    await pool.query('DELETE FROM posts WHERE channel_slug = $1', [slug]);
+    
+    // Delete the channel
+    const result = await pool.query('DELETE FROM channels WHERE slug = $1 RETURNING *', [slug]);
+    if (result.rows.length === 0) return res.status(404).json({ error: 'Channel not found' });
+    
+    res.json({ message: 'Channel and its posts deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Database error' });
+  }
+};
+
 exports.getUsers = async (req, res) => {
   try {
     const result = await pool.query('SELECT id, username, role, created_at FROM users ORDER BY created_at DESC');
