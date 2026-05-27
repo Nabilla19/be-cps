@@ -1,5 +1,7 @@
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
+from typing import Any, Optional
+import json
 import tensorflow as tf
 import numpy as np
 import pandas as pd
@@ -44,6 +46,18 @@ except Exception as e:
 class HealthData(BaseModel):
     features: dict
 
+# Schema untuk Chat
+# history bisa berupa dict (currentState dari frontend) atau list
+class ChatMessage(BaseModel):
+    message: str
+    history: Optional[Any] = None  # Bisa dict (21 fitur) atau list
+
+# Schema untuk Asesmen Akhir (Poin 4)
+class AssessmentRequest(BaseModel):
+    risk_level: str
+    burnout_score: float
+    conversation_summary: str = ""
+
 # 3. Nilai Default (Imputation) jika user tidak melengkapi data
 DEFAULT_VALUES = {
     'age': 20,
@@ -69,9 +83,208 @@ DEFAULT_VALUES = {
     'support_category': 'Low Support'
 }
 
+# === POIN 2: Kata kunci krisis / darurat ===
+CRISIS_KEYWORDS = [
+    "bunuh diri", "ingin mati", "mau mati", "tidak mau hidup", "mau bunuh",
+    "mengakhiri hidup", "tidak ada gunanya hidup", "lebih baik mati",
+    "pengen mati", "pengin mati", "pengen bunuh diri", "pengin bunuh diri",
+    "sudah tidak mau hidup", "capek hidup", "muak hidup", "benci hidup",
+    "self harm", "menyakiti diri", "nyakitin diri", "saya mau pergi selamanya"
+]
+
+def detect_crisis(message: str) -> bool:
+    """Deteksi apakah pesan mengandung kata kunci krisis/darurat."""
+    message_lower = message.lower()
+    return any(keyword in message_lower for keyword in CRISIS_KEYWORDS)
+
+CRISIS_RESPONSE = {
+    "is_crisis": True,
+    "reply": (
+        "Hei, saya mendengarmu. Apa yang kamu rasakan sekarang sangat berat, "
+        "dan saya benar-benar khawatir dengan keadaanmu. "
+        "Kamu tidak harus melewati ini sendirian — ada orang yang peduli padamu "
+        "dan siap mendengarkan kapan saja. Tolong hubungi salah satu bantuan di bawah ini sekarang ya."
+    ),
+    "extractedFeatures": {},
+    "action": "SHOW_EMERGENCY_CONTACTS",
+    "hotlines": [
+        {"name": "Into The Light Indonesia", "number": "119", "ext": "ext 8", "hours": "24 jam"},
+        {"name": "Yayasan Pulih", "number": "02178842580", "display": "(021) 788-42580", "hours": "Senin–Jumat"},
+        {"name": "Hotline Kemenkes", "number": "1500454", "display": "1500-454", "hours": "24 jam"},
+    ]
+}
+
+# === POIN 4: Mapping Asesmen Mental Health ===
+def get_mental_health_assessment(risk_level: str, burnout_score: float) -> dict:
+    """
+    Menghasilkan asesmen kesehatan mental edukatif berdasarkan prediksi model.
+    BUKAN diagnosis medis klinis.
+    """
+    # Tentukan kondisi berdasarkan kombinasi risk + burnout
+    if risk_level == "High" and burnout_score >= 7.0:
+        condition = "Kelelahan Mental Berat (Severe Burnout)"
+        condition_desc = (
+            "Kamu menunjukkan tanda-tanda kelelahan emosional yang sangat intens. "
+            "Ini bisa mencakup rasa putus asa, kehilangan motivasi total, "
+            "dan kesulitan menjalani aktivitas sehari-hari."
+        )
+        urgency = "Tinggi"
+        color = "red"
+        recommendation_action = "Sangat disarankan segera berbicara dengan psikolog atau konselor profesional."
+    elif risk_level == "High" and burnout_score < 7.0:
+        condition = "Tekanan Mental Signifikan (High Stress)"
+        condition_desc = (
+            "Kamu sedang berada di bawah tekanan yang cukup besar. "
+            "Ada tanda-tanda stres kronis yang jika dibiarkan dapat berkembang "
+            "menjadi kondisi yang lebih serius."
+        )
+        urgency = "Sedang-Tinggi"
+        color = "orange"
+        recommendation_action = "Pertimbangkan untuk berkonsultasi dengan konselor atau psikolog dalam waktu dekat."
+    elif risk_level == "Medium":
+        condition = "Kelelahan Emosional Sedang (Moderate Burnout)"
+        condition_desc = (
+            "Kamu menunjukkan beberapa tanda kelelahan emosional yang perlu diperhatikan. "
+            "Mungkin kamu merasa lebih mudah lelah, kurang bersemangat, "
+            "atau sulit fokus belakangan ini."
+        )
+        urgency = "Sedang"
+        color = "yellow"
+        recommendation_action = "Luangkan waktu untuk self-care dan pertimbangkan berbicara dengan orang yang kamu percaya."
+    else:
+        condition = "Kondisi Mental Relatif Stabil"
+        condition_desc = (
+            "Kamu tampaknya sedang dalam kondisi yang cukup baik secara emosional. "
+            "Tetap jaga keseimbangan antara aktivitas dan istirahat ya."
+        )
+        urgency = "Rendah"
+        color = "green"
+        recommendation_action = "Pertahankan kebiasaan baik dan tetap terhubung dengan orang-orang yang mendukungmu."
+
+    return {
+        "condition": condition,
+        "condition_description": condition_desc,
+        "urgency_level": urgency,
+        "color_indicator": color,
+        "recommendation_action": recommendation_action,
+        "disclaimer": (
+            "⚠️ Ini adalah asesmen awal berbasis AI, BUKAN diagnosis medis klinis. "
+            "Untuk evaluasi yang akurat, silakan berkonsultasi dengan psikolog atau psikiater berlisensi."
+        )
+    }
+
 @app.get("/")
 def home():
     return {"message": "MindEase AI API is Running", "status": "Ready"}
+
+# === ENDPOINT CHAT TERPUSAT — Safety + Feature Extraction + Groq ===
+@app.post("/chat")
+def chat(data: ChatMessage):
+    """
+    Pusat kendali tunggal untuk semua logika percakapan AI.
+    chatController.js (Node.js) hanya meneruskan request ke sini.
+    - Safety Protocol: deteksi kata kunci krisis
+    - Fix Looping: system prompt sadar konteks
+    - Feature Extraction: ekstrak 21 fitur dari percakapan (format JSON)
+    """
+    user_message = data.message.strip()
+    current_state = data.history  # history digunakan sebagai currentState dari frontend
+
+    # === PRIORITAS TERTINGGI: Cek Krisis ===
+    if detect_crisis(user_message):
+        return {
+            "reply": CRISIS_RESPONSE["reply"],
+            "extractedFeatures": {},
+            "is_crisis": True,
+            "action": "SHOW_EMERGENCY_CONTACTS",
+            "hotlines": CRISIS_RESPONSE["hotlines"]
+        }
+
+    # Tentukan fitur mana yang masih null/kosong
+    null_features = []
+    if isinstance(current_state, dict):
+        null_features = [k for k, v in current_state.items() if v is None]
+    
+    next_question_hint = null_features[0] if null_features else None
+
+    system_prompt = f"""Kamu adalah "MindEase AI", teman curhat yang empatik untuk mahasiswa Indonesia.
+
+TUGASMU:
+1. Balas dengan empati dan hangat (2-3 kalimat bahasa Indonesia santai).
+2. {f'Di akhir, selipkan pertanyaan NATURAL untuk menggali info tentang: "{next_question_hint}"' if next_question_hint else 'Beritahu user bahwa datanya sudah lengkap dan akan segera dianalisis.'}
+3. Dari pesan user, ekstrak nilai untuk fitur berikut JIKA disebutkan:
+   - age (umur, angka)
+   - gender (Male/Female/Other)
+   - academic_year (tahun kuliah 1-4, angka)
+   - study_hours_per_day (jam belajar per hari, angka)
+   - exam_pressure (tekanan ujian 0-10, angka)
+   - academic_performance (nilai akademik 0-100, angka)
+   - stress_level (level stres 0-10, angka)
+   - anxiety_score (skor kecemasan 0-10, angka)
+   - depression_score (skor depresi 0-10, angka)
+   - sleep_hours (jam tidur per hari, angka)
+   - physical_activity (jam olahraga per minggu, angka)
+   - social_support (dukungan sosial 0-10, angka)
+   - screen_time (jam layar per hari, angka)
+   - internet_usage (jam internet per hari, angka)
+   - financial_stress (tekanan finansial 0-10, angka)
+   - family_expectation (ekspektasi keluarga 0-10, angka)
+   - sleep_category (Cukup/Kurang/Baik)
+   - screen_time_category (Normal/Tinggi)
+   - stress_category (Low/Medium/High)
+   - mental_risk_score (skor risiko mental 0-10, angka)
+   - support_category (Low Support/High Support)
+
+ATURAN WAJIB:
+- JANGAN tanya ulang hal yang sudah dijawab user
+- Jika user menjawab "iya/ya/betul/oke" → KONFIRMASI dan lanjut ke topik berikutnya
+- Satu pertanyaan per giliran saja
+- Validasi perasaan user SEBELUM bertanya hal teknis
+- Jangan pernah merespons kata krisis (bunuh diri, mau mati) dengan pertanyaan biasa
+
+PENTING: Hanya balas dengan JSON murni, tidak ada teks lain:
+{{"reply": "balasan empati kamu", "extractedFeatures": {{"nama_fitur": nilai}}}}"""
+
+    try:
+        completion = groq_client.chat.completions.create(
+            model=GROQ_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_message}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        raw_text = completion.choices[0].message.content or ""
+        
+        # json sudah diimport di atas
+        try:
+            result = json.loads(raw_text)
+        except Exception:
+            result = {"reply": "Aku dengar kamu kok. Ceritakan lebih lanjut ya. 💙", "extractedFeatures": {}}
+
+        # Sanitasi extractedFeatures: hapus nilai null/kosong
+        clean_features = {
+            k: v for k, v in (result.get("extractedFeatures") or {}).items()
+            if v is not None and v != ""
+        }
+
+        return {
+            "reply": result.get("reply", "Aku di sini untukmu. 💙"),
+            "extractedFeatures": clean_features,
+            "is_crisis": False,
+            "action": "CONTINUE_CHAT"
+        }
+
+    except Exception as e:
+        return {
+            "reply": "Maaf, saya sedang mengalami gangguan teknis. Boleh kamu ceritakan lagi?",
+            "extractedFeatures": {},
+            "is_crisis": False,
+            "action": "CONTINUE_CHAT"
+        }
+
 
 @app.post("/predict")
 def predict(data: HealthData):
@@ -120,6 +333,9 @@ def predict(data: HealthData):
     risk_labels = ['High', 'Low', 'Medium']
     risk_level = risk_labels[risk_idx]
     
+    # === POIN 4: Hasilkan Asesmen Mental Health ===
+    assessment = get_mental_health_assessment(risk_level, burnout_score)
+    
     # Memanggil Groq Llama untuk rekomendasi yang lebih natural dan manusiawi
     try:
         level_map = {'High': 'tinggi', 'Medium': 'sedang', 'Low': 'rendah'}
@@ -128,6 +344,7 @@ def predict(data: HealthData):
             f"Kamu adalah konselor kesehatan mental yang hangat dan penuh empati. "
             f"Seorang mahasiswa baru saja selesai berbagi cerita dan sistem kami menilai "
             f"tingkat risiko mentalnya {level_indo} dengan skor burnout {burnout_score:.1f} dari 10. "
+            f"Kondisi yang terdeteksi: {assessment['condition']}. "
             f"Tulis 2-3 kalimat pesan personal yang terasa TULUS dan HANGAT untuknya. "
             f"Jangan sebut angka atau skor apapun. Jangan mulai dengan kata 'Berdasarkan' atau 'Analisis'. "
             f"Langsung sapa jiwanya seolah kamu sudah mendengar semua ceritanya. "
@@ -157,7 +374,19 @@ def predict(data: HealthData):
             "low": round(float(risk_probs[1]), 4),
             "medium": round(float(risk_probs[2]), 4)
         },
-        "genai_recommendation": ai_recommendation
+        "genai_recommendation": ai_recommendation,
+        # Poin 4: Asesmen Mental Health
+        "mental_health_assessment": assessment
     }
+
+# === POIN 4: Endpoint Asesmen Standalone (bisa dipanggil terpisah) ===
+@app.post("/assessment")
+def get_assessment(data: AssessmentRequest):
+    """
+    Endpoint untuk mendapatkan asesmen mental health secara standalone,
+    setelah prediksi selesai dilakukan.
+    """
+    assessment = get_mental_health_assessment(data.risk_level, data.burnout_score)
+    return assessment
 
 # Cara menjalankan: uvicorn app:app --reload
