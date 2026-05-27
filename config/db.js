@@ -128,7 +128,45 @@ const initDB = async () => {
       `);
     }
 
-    console.log('Connected to PostgreSQL and verified tables');
+    // Create chat_sessions table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_sessions (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        title VARCHAR(255) DEFAULT 'Obrolan Baru',
+        risk_level VARCHAR(50) DEFAULT '-',
+        burnout_score REAL DEFAULT 0.0,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Create chat_history table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_history (
+        id SERIAL PRIMARY KEY,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        session_id INTEGER REFERENCES chat_sessions(id) ON DELETE CASCADE,
+        sender VARCHAR(50) NOT NULL,
+        text TEXT,
+        type VARCHAR(50) DEFAULT 'text',
+        risk_level VARCHAR(50),
+        burnout_score REAL,
+        recommendation TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      )
+    `);
+
+    // Alter chat_history table if it already existed but didn't have session_id
+    try {
+      await pool.query(`
+        ALTER TABLE chat_history ADD COLUMN session_id INTEGER REFERENCES chat_sessions(id) ON DELETE CASCADE
+      `);
+      console.log('Successfully altered chat_history table to add session_id column');
+    } catch (e) {
+      // Column might already exist, safe to ignore
+    }
+
+    console.log('Connected to PostgreSQL/SQLite and verified tables');
   } catch (err) {
     console.error('Error initializing PostgreSQL tables', err);
   }

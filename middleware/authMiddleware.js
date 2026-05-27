@@ -24,4 +24,19 @@ const authenticateAdmin = (req, res, next) => {
   });
 };
 
-module.exports = { authenticateToken, authenticateAdmin, SECRET_KEY };
+const optionalAuthenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) {
+    return next();
+  }
+
+  jwt.verify(token, SECRET_KEY, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Invalid token.' });
+    req.user = user;
+    next();
+  });
+};
+
+module.exports = { authenticateToken, authenticateAdmin, optionalAuthenticateToken, SECRET_KEY };
