@@ -185,19 +185,33 @@ exports.chatAgent = async (req, res) => {
     // 2. Coba panggil AI Model jika API Key tersedia
     if ((process.env.GEMINI_API_KEY && GoogleGenAI) || (process.env.GROQ_API_KEY && Groq)) {
       try {
+        const CORE_ASSESSMENT_KEYS = [
+          'academic_year', 'study_hours_per_day', 'exam_pressure', 'academic_performance',
+          'stress_level', 'anxiety_score', 'depression_score', 'sleep_hours',
+          'physical_activity', 'social_support', 'screen_time', 'internet_usage',
+          'financial_stress', 'family_expectation'
+        ];
+
         const missingFeatures = [];
         if (currentState && typeof currentState === 'object') {
-          for (const [key, value] of Object.entries(currentState)) {
-            if (value === null) {
+          for (const key of CORE_ASSESSMENT_KEYS) {
+            if (currentState[key] === null || currentState[key] === undefined) {
               missingFeatures.push(key);
             }
           }
         }
-        const nextQuestionHint = missingFeatures[0] || 'semua sudah lengkap';
+        const nextQuestionHint = missingFeatures[0] || 'selesai';
 
         let prompt = "";
         
-        if (activeMode === 'chat') {
+        if (nextQuestionHint === 'selesai' && activeMode === 'assessment') {
+          prompt = `Kamu adalah "MindEase AI", asisten kesehatan mental yang hangat. 
+Semua 16 data penting untuk analisis kesehatan mental user (tingkat stres, skor kecemasan, skor depresi, jam tidur, beban kuliah, umur, jenis kelamin, dll) sudah sukses terkumpul lengkap dan utuh!
+Beritahu user dengan nada gembira, hangat, dan penuh penghargaan bahwa seluruh data kualitatif mereka telah sukses dianalisis oleh AI. Beritahu mereka untuk mengeklik tombol **"🪄 Lihat Hasil Analisis Lengkap"** di bagian bawah obrolan untuk melihat hasil analisis kesehatan mental mereka secara lengkap! JANGAN mengajukan pertanyaan apa pun lagi.
+
+PENTING: Hanya balas dengan JSON murni dengan struktur:
+{"reply": "balasan empati kamu yang memberi tahu bahwa data sudah lengkap", "extractedFeatures": {}}`;
+        } else if (activeMode === 'chat') {
           prompt = `Kamu adalah "MindEase AI", sahabat curhat yang sangat empatik, hangat, dan suportif untuk mahasiswa Indonesia.
 
 TUGASMU:
@@ -205,7 +219,7 @@ TUGASMU:
 2. Fokus sepenuhnya pada validasi emosi dan mendengarkan keluh kesah user secara alami.
 3. JANGAN pernah menanyakan data teknis, skor, angka, atau variabel apa pun secara paksa. Biarkan percakapan mengalir santai.
 4. Di akhir tanggapan, Anda boleh mengajukan satu pertanyaan terbuka yang lembut untuk mendorong mereka bercerita lebih lanjut tentang perasaan mereka (bukan tentang data numerik).
-5. Dari pesan user, tetap lakukan ekstraksi secara diam-diam JIKA mereka menyebutkan informasi berikut (jika tidak ada, kosongkan saja):
+5. Dari pesan user, tetap lakukan ekstraksi secara diam-diam JIKA mereka menceritakan informasi berikut secara natural (jika tidak ada, kosongkan saja):
    - age (umur, angka)
    - gender (Male/Female/Other)
    - academic_year (tahun kuliah 1-4, angka)
@@ -226,29 +240,33 @@ TUGASMU:
 PENTING: Hanya balas dengan JSON murni dengan struktur:
 {"reply": "balasan empati kamu", "extractedFeatures": {"nama_fitur": nilai}}`;
         } else {
-          prompt = `Kamu adalah "MindEase AI", asisten kesehatan mental yang lembut dan penuh empati. Saat ini kamu sedang membimbing user dalam sesi **Asesmen Kesehatan Mental Terpandu** secara bertahap.
+          prompt = `Kamu adalah "MindEase AI", asisten kesehatan mental yang sangat cerdas, lembut, dan penuh empati. Saat ini kamu sedang membimbing user dalam sesi **Asesmen Kesehatan Mental Terpandu** secara bertahap untuk mengumpulkan data variabel prediksi.
 
-TUGASMU:
-1. Target pertanyaan saat ini adalah untuk menggali info tentang fitur: "${nextQuestionHint}".
-2. Balas pesan user dengan empati hangat (1-2 kalimat), kemudian ajukan satu pertanyaan kualitatif yang sangat natural tentang "${nextQuestionHint}".
-3. ATURAN MUTLAK: JANGAN PERNAH menanyakan nilai angka atau rate 1-10 secara langsung!
-   - Contoh salah: "Dari 1-10 seberapa cemas kamu?"
-   - Contoh benar: "Bagaimana rasanya ketika kecemasan itu datang menyerangmu? Apakah kamu merasa sangat tidak tenang dan panik, atau masih bisa dikendalikan dengan baik?"
-4. Dari jawaban kualitatif user, kamu harus menyimpulkan sendiri nilai estimasi angkanya:
-   - Skala 1-10 (misal: stress_level, anxiety_score, depression_score, exam_pressure, social_support, financial_stress, family_expectation):
+TUGAS UTAMAMU:
+1. Identifikasi variabel kosong pada currentState. Target pertanyaan saat ini difokuskan pada: "${nextQuestionHint}".
+2. **ATURAN DEDUKSI KOLEKTIF & DEDUKSI MANDIRI (WAJIB!)**:
+   - JANGAN pernah menanyakan data satu per satu secara kaku layaknya kuesioner medis! Anda harus mengajukan **satu pertanyaan kualitatif bertema besar** yang memungkinkan user menceritakan beberapa hal terkait secara bersamaan.
+   - **Grup Tema Pertanyaan**:
+     * **Tema Akademik** (Gali: academic_year, study_hours_per_day, exam_pressure, academic_performance): Bertanyalah tentang tingkat perkuliahan, seberapa keras mereka belajar per hari, tekanan ujian, dan bagaimana performa akademik mereka saat ini.
+     * **Tema Mental & Tidur** (Gali: stress_level, anxiety_score, depression_score, sleep_hours): Tanyakan mengenai tingkat stres, kecemasan, kelelahan mental, dan berapa jam mereka tidur dalam sehari.
+     * **Tema Gaya Hidup & Sosial** (Gali: physical_activity, screen_time, internet_usage, social_support): Tanyakan tentang olahraga, screen time / berselancar internet, dan dukungan dari teman/keluarga.
+     * **Tema Tekanan Eksternal** (Gali: financial_stress, family_expectation): Tanyakan mengenai kekhawatiran biaya kuliah/finansial dan tuntutan harapan orang tua.
+3. Dari jawaban cerita user, Anda harus mendeduksi sebanyak mungkin variabel sekaligus (bisa 3-5 variabel sekaligus dari 1 tanggapan user!).
+4. JANGAN menanyakan nilai angka atau rate 1-10 secara langsung! Simpulkan sendiri nilai numeriknya dari cerita kualitatif user:
+   - Skala 1-10 (stress_level, anxiety_score, depression_score, exam_pressure, social_support, financial_stress, family_expectation):
      * Sangat ringan/hampir tidak ada -> 1-2
      * Ringan/kadang-kadang -> 3-4
      * Sedang/cukup terasa -> 5-6
-     * Berat/sering/cukup mengganggu -> 7-8
+     * Berat/sering/mengganggu -> 7-8
      * Sangat berat/ekstrem/tidak tertahankan -> 9-10
    - Skala 0-100 (academic_performance):
      * Kurang/buruk -> 40-59
      * Cukup/sedang -> 60-79
      * Sangat baik/IPK tinggi -> 80-100
-5. Masukkan nilai kesimpulan angka tersebut ke dalam objek extractedFeatures untuk fitur: "${nextQuestionHint}".
+5. Masukkan seluruh variabel numerik hasil simpulan Anda tersebut ke dalam objek extractedFeatures.
 
 PENTING: Hanya balas dengan JSON murni dengan struktur:
-{"reply": "balasan empati dan pertanyaan kualitatif kamu", "extractedFeatures": {"nama_fitur": nilai}}`;
+{"reply": "balasan empati hangat dan pertanyaan kualitatif bertema besar dari kamu", "extractedFeatures": {"nama_fitur": nilai}}`;
         }
 
         const rawText = await callAI(prompt, message);
@@ -343,101 +361,13 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
     }
 
     // ==========================================
-    // SMART LOCAL FALLBACK (Mode Teman Curhat)
+    // SMART LOCAL FALLBACK (Mode Teman Curhat & Asesmen Terpandu)
     // ==========================================
-    console.warn("⚠️ FastAPI/Groq Offline. Mengaktifkan Mode Teman Curhat MindEase (Smart Local Fallback)...");
+    console.warn("⚠️ FastAPI/Groq Offline. Mengaktifkan Mode Pendukung MindEase (Smart Local Fallback)...");
 
-    const missingFeatures = [];
-    if (currentState && typeof currentState === 'object') {
-      for (const [key, value] of Object.entries(currentState)) {
-        if (value === null) {
-          missingFeatures.push(key);
-        }
-      }
-    }
-
-    let reply = "Aku di sini untuk mendengarkanmu. Ceritakan lebih banyak tentang apa yang sedang kamu rasakan ya. 💙";
-    const extracted = {};
-
-
-
-    // Ekstrak fitur secara cerdas dari input pesan user saat ini
     const numMatch = message.match(/\b\d+(\.\d+)?\b/);
     const parsedNum = numMatch ? parseFloat(numMatch[0]) : null;
-
-    if (missingFeatures.length > 0) {
-      const nextFeature = missingFeatures[0];
-
-      // Simulasikan ekstraksi berdasarkan apa yang dijawab user
-      if (nextFeature === 'age' && parsedNum && parsedNum > 10 && parsedNum < 100) {
-        extracted['age'] = parsedNum;
-        missingFeatures.shift();
-      } else if (nextFeature === 'gender') {
-        const textLower = message.toLowerCase();
-        if (textLower.includes('perempuan') || textLower.includes('cewek') || textLower.includes('wanita') || textLower.includes('female')) {
-          extracted['gender'] = 'Female';
-          missingFeatures.shift();
-        } else if (textLower.includes('laki') || textLower.includes('cowok') || textLower.includes('pria') || textLower.includes('male')) {
-          extracted['gender'] = 'Male';
-          missingFeatures.shift();
-        }
-      } else if (parsedNum !== null) {
-        // Imputasi angka ke fitur numerik berikutnya
-        extracted[nextFeature] = parsedNum;
-        missingFeatures.shift();
-      }
-
-      // Siapkan pertanyaan berikutnya untuk menggali fitur yang masih null
-      if (missingFeatures.length > 0) {
-        const currentTarget = missingFeatures[0];
-        const questions = {
-          age: "Boleh tahu berapa umurmu saat ini? (contoh: 20)",
-          gender: "Apa jenis kelaminmu? (Laki-laki / Perempuan)",
-          academic_year: "Saat ini kamu sedang menempuh perkuliahan di tahun/angkatan ke berapa? (1 - 4)",
-          study_hours_per_day: "Berapa jam yang biasanya kamu habiskan untuk belajar dalam sehari?",
-          exam_pressure: "Dari skala 1 sampai 10, seberapa berat tekanan ujian yang kamu rasakan?",
-          academic_performance: "Berapa nilai rata-rata prestasi akademik (IPK/nilai) kamu dalam skala 100?",
-          stress_level: "Dari skala 1 sampai 10, berapa tingkat stres yang kamu rasakan belakangan ini?",
-          anxiety_score: "Dari skala 1 sampai 10, seberapa sering kamu merasakan kecemasan berlebih?",
-          depression_score: "Dari skala 1 sampai 10, seberapa sering kamu merasa sedih atau lelah emosional?",
-          sleep_hours: "Berapa jam rata-rata kamu tidur dalam sehari?",
-          physical_activity: "Berapa jam biasanya kamu berolahraga atau melakukan aktivitas fisik dalam seminggu?",
-          social_support: "Dari skala 1 sampai 10, seberapa besar dukungan sosial yang kamu rasakan dari teman atau keluarga?",
-          screen_time: "Berapa jam rata-rata screen time (waktu di depan layar HP/laptop) kamu per hari?",
-          internet_usage: "Berapa jam waktu yang kamu habiskan untuk internetan dalam sehari?",
-          financial_stress: "Dari skala 1 sampai 10, seberapa besar tekanan finansial yang kamu rasakan saat ini?",
-          family_expectation: "Dari skala 1 sampai 10, seberapa tinggi ekspektasi keluarga yang membebanimu?"
-        };
-
-        const featureLabels = {
-          age: "umur",
-          gender: "jenis kelamin",
-          academic_year: "tahun kuliah",
-          study_hours_per_day: "jam belajar per hari",
-          exam_pressure: "tekanan ujian",
-          academic_performance: "prestasi akademik",
-          stress_level: "level stres",
-          anxiety_score: "skor kecemasan",
-          depression_score: "skor depresi",
-          sleep_hours: "jam tidur",
-          physical_activity: "aktivitas fisik",
-          social_support: "dukungan sosial",
-          screen_time: "screen time",
-          internet_usage: "penggunaan internet",
-          financial_stress: "tekanan finansial",
-          family_expectation: "ekspektasi keluarga"
-        };
-
-        const targetLabel = featureLabels[currentTarget] || currentTarget;
-        const defaultQuestion = `Boleh ceritakan seputar ${targetLabel} kamu?`;
-
-        reply = `Terima kasih sudah berbagi. ${questions[currentTarget] || defaultQuestion} 💙`;
-      } else {
-        reply = "Semua informasimu telah lengkap terkumpul! Yuk, klik tombol **'Selesaikan & Analisis'** di bagian bawah untuk melihat hasil analisis kesehatan mentalmu. 🪄";
-      }
-    } else {
-      reply = "Informasimu sudah lengkap terkumpul! Yuk, klik tombol **'Selesaikan & Analisis'** di kanan bawah untuk melihat hasil analisis kesehatan mentalmu. 🪄";
-    }
+    const extracted = {};
 
     // Suntikkan gender & age jika belum ada di percakapan aktif
     if (userGender && (!currentState || currentState.gender === null)) {
@@ -447,7 +377,289 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
       extracted.age = userAge;
     }
 
-    res.json({
+    if (activeMode === 'chat') {
+      // ----------------------------------------------------
+      // Mode Chat / Curhat Santai (Local Fallback)
+      // ----------------------------------------------------
+      const reply = "Aku di sini untuk mendengarkan keluh kesahmu. Ceritakan saja apa yang sedang membebani pikiranmu secara santai ya. Jika kamu ingin menganalisis tingkat burnout atau stres secara detail, klik tombol **'🪄 Mulai Asesmen Kesehatan Mental'** di bawah obrolan agar aku bisa memandumu secara terarah. 💙";
+
+      // Ekstrak secara pasif jika tidak sengaja menyebutkan gender, umur, atau jam tidur
+      const textLower = message.toLowerCase();
+      if (textLower.includes('perempuan') || textLower.includes('cewek') || textLower.includes('wanita') || textLower.includes('female')) {
+        extracted.gender = 'Female';
+      } else if (textLower.includes('laki') || textLower.includes('cowok') || textLower.includes('pria') || textLower.includes('male')) {
+        extracted.gender = 'Male';
+      }
+
+      if (parsedNum && parsedNum > 10 && parsedNum < 100) {
+        extracted.age = parsedNum;
+      }
+
+      const sleepMatch = message.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
+      if (sleepMatch) {
+        extracted.sleep_hours = parseFloat(sleepMatch[1]);
+      }
+
+      // Perekaman pesan balasan AI ke database
+      if (req.user && session_id) {
+        try {
+          await pool.query(
+            "INSERT INTO chat_history (user_id, session_id, sender, text, type) VALUES ($1, $2, $3, $4, $5)",
+            [req.user.id, session_id, 'ai', reply, 'text']
+          );
+        } catch (dbErr) {
+          console.error("Gagal merekam chat AI ke DB:", dbErr.message);
+        }
+      }
+
+      return res.json({
+        reply,
+        extractedFeatures: extracted,
+        is_crisis: false,
+        action: "CONTINUE_CHAT"
+      });
+    }
+
+    // ----------------------------------------------------
+    // Mode Asesmen Terpandu Tematis (Smart Local Fallback)
+    // ----------------------------------------------------
+    const THEME_GROUPS = [
+      {
+        name: 'Akademik',
+        keys: ['academic_year', 'study_hours_per_day', 'exam_pressure', 'academic_performance'],
+        question: "Mari kita mulai dengan kehidupan perkuliahanmu. 🎓 Di tahun/angkatan ke berapa kamu saat ini? Berapa jam biasanya kamu belajar per hari, seberapa berat tekanan ujian yang kamu rasakan, dan bagaimana performa/nilai akademikmu sejauh ini? Ceritakan secara kualitatif, aku akan menyimpulkannya sendiri. 💙",
+        extract: (text, num) => {
+          const ext = {};
+          const textLower = text.toLowerCase();
+
+          // academic_year
+          let year = 3;
+          const yearMatch = text.match(/\b([1-4])\b/);
+          if (yearMatch) {
+            year = parseInt(yearMatch[1]);
+          } else if (textLower.includes("pertama") || textLower.includes("maba") || textLower.includes("satu")) {
+            year = 1;
+          } else if (textLower.includes("kedua") || textLower.includes("dua")) {
+            year = 2;
+          } else if (textLower.includes("ketiga") || textLower.includes("tiga")) {
+            year = 3;
+          } else if (textLower.includes("keempat") || textLower.includes("empat") || textLower.includes("akhir")) {
+            year = 4;
+          }
+          ext.academic_year = year;
+
+          // study_hours_per_day
+          let hours = 4.0;
+          const hoursMatch = text.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
+          if (hoursMatch) {
+            hours = parseFloat(hoursMatch[1]);
+          } else if (num && num >= 1 && num <= 12 && num !== year) {
+            hours = num;
+          }
+          ext.study_hours_per_day = hours;
+
+          // exam_pressure
+          let pressure = 5.0;
+          if (textLower.includes("berat") || textLower.includes("stres") || textLower.includes("parah") || textLower.includes("tinggi") || textLower.includes("besar") || textLower.includes("pusing") || textLower.includes("capek") || textLower.includes("gila") || textLower.includes("menekan") || textLower.includes("sangat")) {
+            pressure = 8.0;
+          } else if (textLower.includes("santai") || textLower.includes("rendah") || textLower.includes("aman") || textLower.includes("lancar") || textLower.includes("kecil") || textLower.includes("enteng") || textLower.includes("gampang")) {
+            pressure = 3.0;
+          }
+          ext.exam_pressure = pressure;
+
+          // academic_performance
+          let perf = 75.0;
+          const perfMatch = text.match(/\b([5-9][0-9]|100)\b/);
+          if (perfMatch) {
+            perf = parseFloat(perfMatch[1]);
+          } else if (textLower.includes("bagus") || textLower.includes("tinggi") || textLower.includes("memuaskan") || textLower.includes("aman") || textLower.includes("lancar") || textLower.includes("ipk naik")) {
+            perf = 85.0;
+          } else if (textLower.includes("buruk") || textLower.includes("turun") || textLower.includes("jelek") || textLower.includes("anjlok") || textLower.includes("hancur")) {
+            perf = 55.0;
+          }
+          ext.academic_performance = perf;
+
+          return ext;
+        }
+      },
+      {
+        name: 'Mental & Tidur',
+        keys: ['stress_level', 'anxiety_score', 'depression_score', 'sleep_hours'],
+        question: "Selanjutnya, bagaimana dengan kondisi emosionalmu belakangan ini? 💙 Dari skala rasa stres, kecemasan, atau kesedihan yang kamu rasakan, serta berapa jam rata-rata kamu tidur dalam sehari? Tumpahkan saja perasaanmu ya.",
+        extract: (text, num) => {
+          const ext = {};
+          const textLower = text.toLowerCase();
+
+          // stress_level
+          let stress = 5.0;
+          if (textLower.includes("stres berat") || textLower.includes("stres banget") || textLower.includes("sangat stres") || textLower.includes("parah") || textLower.includes("gila") || textLower.includes("depresi")) {
+            stress = 8.0;
+          } else if (textLower.includes("lumayan stres") || textLower.includes("stres sedang") || textLower.includes("cukup stres")) {
+            stress = 6.0;
+          } else if (textLower.includes("tidak stres") || textLower.includes("aman") || textLower.includes("santai") || textLower.includes("tenang")) {
+            stress = 2.0;
+          }
+          ext.stress_level = stress;
+
+          // anxiety_score
+          let anxiety = 5.0;
+          if (textLower.includes("cemas banget") || textLower.includes("panik") || textLower.includes("anxiety") || textLower.includes("takut banget") || textLower.includes("khawatir sekali")) {
+            anxiety = 8.0;
+          } else if (textLower.includes("kadang cemas") || textLower.includes("lumayan cemas") || textLower.includes("khawatir")) {
+            anxiety = 5.0;
+          } else if (textLower.includes("tenang") || textLower.includes("tidak cemas") || textLower.includes("biasa saja")) {
+            anxiety = 2.0;
+          }
+          ext.anxiety_score = anxiety;
+
+          // depression_score
+          let depression = 5.0;
+          if (textLower.includes("depresi") || textLower.includes("sedih banget") || textLower.includes("putus asa") || textLower.includes("menangis") || textLower.includes("sangat sedih")) {
+            depression = 8.0;
+          } else if (textLower.includes("sedih") || textLower.includes("lesu") || textLower.includes("murung")) {
+            depression = 5.0;
+          } else if (textLower.includes("bahagia") || textLower.includes("senang") || textLower.includes("ceria") || textLower.includes("gembira")) {
+            depression = 2.0;
+          }
+          ext.depression_score = depression;
+
+          // sleep_hours
+          let sleep = 6.0;
+          const sleepMatch = text.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
+          if (sleepMatch) {
+            sleep = parseFloat(sleepMatch[1]);
+          } else if (num && num >= 1 && num <= 12) {
+            sleep = num;
+          }
+          ext.sleep_hours = sleep;
+
+          return ext;
+        }
+      },
+      {
+        name: 'Gaya Hidup & Sosial',
+        keys: ['physical_activity', 'social_support', 'screen_time', 'internet_usage'],
+        question: "Mari kita lihat gaya hidupmu sehari-hari. 🌟 Berapa jam biasanya kamu berolahraga dalam seminggu? Lalu, berapa jam screen time atau berselancar internet dalam sehari, dan seberapa besar dukungan sosial yang kamu rasakan dari teman atau keluarga? Ceritakan singkat saja ya.",
+        extract: (text, num) => {
+          const ext = {};
+          const textLower = text.toLowerCase();
+
+          // physical_activity
+          let phys = 2.0;
+          if (textLower.includes("jarang") || textLower.includes("tidak pernah") || textLower.includes("gapernah") || textLower.includes("mager") || textLower.includes("malas")) {
+            phys = 0.5;
+          } else if (textLower.includes("sering") || textLower.includes("tiap hari") || textLower.includes("rutin") || textLower.includes("banyak olahraga")) {
+            phys = 5.0;
+          }
+          ext.physical_activity = phys;
+
+          // screen_time
+          let screen = 6.0;
+          const screenMatch = text.match(/\b([1-9]|1[0-9])\s*(jam|hours)\b/i);
+          if (screenMatch) {
+            screen = parseFloat(screenMatch[1]);
+          } else if (textLower.includes("sering") || textLower.includes("lama") || textLower.includes("seharian") || textLower.includes("candu")) {
+            screen = 9.0;
+          } else if (textLower.includes("sebentar") || textLower.includes("jarang") || textLower.includes("sedikit")) {
+            screen = 3.0;
+          }
+          ext.screen_time = screen;
+          ext.internet_usage = screen;
+
+          // social_support
+          let support = 6.0;
+          if (textLower.includes("banyak teman") || textLower.includes("didukung") || textLower.includes("selalu ada") || textLower.includes("keluarga baik") || textLower.includes("sahabat")) {
+            support = 8.0;
+          } else if (textLower.includes("kesepian") || textLower.includes("sendiri") || textLower.includes("gapunya teman") || textLower.includes("tidak didukung") || textLower.includes("dijauhi")) {
+            support = 3.0;
+          }
+          ext.social_support = support;
+
+          return ext;
+        }
+      },
+      {
+        name: 'Tekanan Eksternal',
+        keys: ['financial_stress', 'family_expectation'],
+        question: "Terakhir, apakah ada tekanan dari luar yang membebanimu saat ini? 🏡 Seperti kekhawatiran finansial (biaya kuliah) atau ekspektasi yang tinggi dari orang tua/keluarga?",
+        extract: (text, num) => {
+          const ext = {};
+          const textLower = text.toLowerCase();
+
+          // financial_stress
+          let fin = 5.0;
+          if (textLower.includes("uang") || textLower.includes("biaya") || textLower.includes("finansial") || textLower.includes("mahal") || textLower.includes("miskin") || textLower.includes("susah bayar") || textLower.includes("utang")) {
+            fin = 8.0;
+          } else if (textLower.includes("aman") || textLower.includes("cukup") || textLower.includes("tidak masalah") || textLower.includes("tercukupi")) {
+            fin = 3.0;
+          }
+          ext.financial_stress = fin;
+
+          // family_expectation
+          let fam = 5.0;
+          if (textLower.includes("tuntutan") || textLower.includes("ekspektasi") || textLower.includes("orang tua") || textLower.includes("harapan keluarga") || textLower.includes("dituntut") || textLower.includes("memaksa")) {
+            fam = 8.0;
+          } else if (textLower.includes("santai") || textLower.includes("bebas") || textLower.includes("tidak menuntut") || textLower.includes("mendukung apapun")) {
+            fam = 3.0;
+          }
+          ext.family_expectation = fam;
+
+          return ext;
+        }
+      }
+    ];
+
+    // Tentukan grup pertama yang masih belum lengkap berdasarkan currentState
+    let currentIncompleteGroup = null;
+    for (const group of THEME_GROUPS) {
+      const isGroupIncomplete = group.keys.some(k => !currentState || currentState[k] === null || currentState[k] === undefined);
+      if (isGroupIncomplete) {
+        currentIncompleteGroup = group;
+        break;
+      }
+    }
+
+    const isStartTrigger = message.toLowerCase().includes("mulai sesi asesmen") || message.toLowerCase().includes("memulai sesi");
+
+    // Jika ada grup yang aktif dan ini bukan trigger awal, lakukan ekstraksi dari pesan user saat ini
+    if (currentIncompleteGroup && !isStartTrigger) {
+      const themeExtracted = currentIncompleteGroup.extract(message, parsedNum);
+      Object.assign(extracted, themeExtracted);
+    }
+
+    // Gabungkan dengan currentState untuk mencari grup tak lengkap berikutnya
+    const tempState = { ...(currentState || {}), ...extracted };
+
+    // Cari grup tidak lengkap berikutnya
+    let nextIncompleteGroup = null;
+    for (const group of THEME_GROUPS) {
+      const isGroupIncomplete = group.keys.some(k => tempState[k] === null || tempState[k] === undefined);
+      if (isGroupIncomplete) {
+        nextIncompleteGroup = group;
+        break;
+      }
+    }
+
+    let reply = "";
+    if (nextIncompleteGroup) {
+      reply = nextIncompleteGroup.question;
+    } else {
+      reply = "Semua informasimu telah lengkap terkumpul! Yuk, klik tombol **'🪄 Lihat Hasil Analisis Lengkap'** di bagian bawah obrolan untuk melihat hasil analisis kesehatan mentalmu. 🪄";
+    }
+
+    // Perekaman pesan AI ke database
+    if (req.user && session_id && reply) {
+      try {
+        await pool.query(
+          "INSERT INTO chat_history (user_id, session_id, sender, text, type) VALUES ($1, $2, $3, $4, $5)",
+          [req.user.id, session_id, 'ai', reply, 'text']
+        );
+      } catch (dbErr) {
+        console.error("Gagal merekam chat AI ke DB:", dbErr.message);
+      }
+    }
+
+    return res.json({
       reply,
       extractedFeatures: extracted,
       is_crisis: false,
