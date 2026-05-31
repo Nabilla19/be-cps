@@ -30,8 +30,9 @@ const getTransporter = () => {
     return null;
   }
 
-  // Jika menggunakan Gmail, sambungkan langsung ke IPv4 fisik dengan TLS servername bypass
-  if (host && host.includes('gmail.com')) {
+  // Jika menggunakan Gmail di LOCAL (bukan Render), sambungkan langsung ke IPv4 fisik dengan TLS servername bypass
+  const isRender = process.env.RENDER === 'true' || process.env.NODE_ENV === 'production';
+  if (host && host.includes('gmail.com') && !isRender) {
     return nodemailer.createTransport({
       host: gmailIpv4, // Menggunakan IP IPv4 langsung demi menghindari bypass DNS IPv6 IndiHome
       port: 465,
