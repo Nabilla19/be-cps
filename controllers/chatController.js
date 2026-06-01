@@ -93,6 +93,214 @@ function calculateAge(birthDateStr) {
   return age;
 }
 
+function extractFeaturesLocally(message, currentState) {
+  const textLower = message.toLowerCase();
+  const extracted = {};
+
+  // Fungsi pembantu untuk memastikan kita tidak menimpa state yang sudah ada
+  const isUnset = (key) => {
+    return (!currentState || currentState[key] === null || currentState[key] === undefined) && (extracted[key] === undefined);
+  };
+
+  // 1. age (Umur)
+  if (isUnset('age')) {
+    const ageMatch = textLower.match(/\b(?:umur|usia)\s*([1-9][0-9])\b/i) || textLower.match(/\b([1-9][0-9])\s*(?:tahun|thn)\b/i);
+    if (ageMatch) {
+      extracted.age = parseInt(ageMatch[1]);
+    }
+  }
+
+  // 2. gender (Jenis Kelamin)
+  if (isUnset('gender')) {
+    if (textLower.includes('perempuan') || textLower.includes('cewek') || textLower.includes('wanita') || textLower.includes('female')) {
+      extracted.gender = 'Female';
+    } else if (textLower.includes('laki') || textLower.includes('cowok') || textLower.includes('pria') || textLower.includes('male') || textLower.includes('gender laki')) {
+      extracted.gender = 'Male';
+    }
+  }
+
+  // 3. academic_year (Tahun Kuliah)
+  if (isUnset('academic_year')) {
+    const yearMatch = textLower.match(/\b(?:tahun|angkatan|semester)\s*([1-4])\b/i) || textLower.match(/\b([1-4])\b/);
+    if (yearMatch) {
+      extracted.academic_year = parseInt(yearMatch[1]);
+    } else if (textLower.includes("pertama") || textLower.includes("maba") || textLower.includes("satu") || textLower.includes("semester 1") || textLower.includes("semester 2")) {
+      extracted.academic_year = 1;
+    } else if (textLower.includes("kedua") || textLower.includes("dua") || textLower.includes("semester 3") || textLower.includes("semester 4")) {
+      extracted.academic_year = 2;
+    } else if (textLower.includes("ketiga") || textLower.includes("tiga") || textLower.includes("semester 5") || textLower.includes("semester 6")) {
+      extracted.academic_year = 3;
+    } else if (textLower.includes("keempat") || textLower.includes("empat") || textLower.includes("akhir") || textLower.includes("semester 7") || textLower.includes("semester 8")) {
+      extracted.academic_year = 4;
+    }
+  }
+
+  // 4. study_hours_per_day (Jam Belajar)
+  if (isUnset('study_hours_per_day')) {
+    const studyHoursMatch = textLower.match(/\b(?:belajar|kuliah)\s*([1-9]|1[0-2])\s*jam\b/i) || textLower.match(/\b([1-9]|1[0-2])\s*jam\s*(?:belajar|kuliah)\b/i);
+    if (studyHoursMatch) {
+      extracted.study_hours_per_day = parseFloat(studyHoursMatch[1]);
+    } else if (textLower.includes("kurang maksimal") || textLower.includes("jarang belajar") || textLower.includes("kurang belajar") || textLower.includes("malas belajar") || textLower.includes("jarang kuliah") || textLower.includes("sedikit belajar")) {
+      extracted.study_hours_per_day = 2.0;
+    } else if (textLower.includes("seharian belajar") || textLower.includes("belajar terus") || textLower.includes("ambis")) {
+      extracted.study_hours_per_day = 8.0;
+    }
+  }
+
+  // 5. exam_pressure (Tekanan Ujian)
+  if (isUnset('exam_pressure')) {
+    const pressureMatch = textLower.match(/(?:tekanan ujian|exam pressure|tekanan)\s*(?:skala\s*)?\b([1-9]|10)\b/i);
+    if (pressureMatch) {
+      extracted.exam_pressure = parseFloat(pressureMatch[1]);
+    } else if (textLower.includes("susah") || textLower.includes("sulit") || textLower.includes("rumit") || textLower.includes("berat") || textLower.includes("stres") || textLower.includes("parah") || textLower.includes("tinggi") || textLower.includes("pusing") || textLower.includes("capek")) {
+      extracted.exam_pressure = 8.5;
+    } else if (textLower.includes("santai") || textLower.includes("rendah") || textLower.includes("aman") || textLower.includes("lancar") || textLower.includes("gampang") || textLower.includes("mudah")) {
+      extracted.exam_pressure = 3.0;
+    }
+  }
+
+  // 6. academic_performance (Nilai Akademik)
+  if (isUnset('academic_performance')) {
+    const perfMatch = textLower.match(/\b([5-9][0-9]|100)\b/);
+    if (perfMatch) {
+      extracted.academic_performance = parseFloat(perfMatch[1]);
+    } else if (textLower.includes("bagus") || textLower.includes("tinggi") || textLower.includes("memuaskan") || textLower.includes("aman") || textLower.includes("ipk tinggi") || textLower.includes("naik")) {
+      extracted.academic_performance = 85.0;
+    } else if (textLower.includes("rendah") || textLower.includes("buruk") || textLower.includes("turun") || textLower.includes("jelek") || textLower.includes("anjlok") || textLower.includes("hancur") || textLower.includes("ipk rendah") || textLower.includes("kurang maksimal")) {
+      extracted.academic_performance = 55.0;
+    }
+  }
+
+  // Helper untuk deteksi skala angka literal (misal: "stres level 9" -> 9.0)
+  const scaleMatch = textLower.match(/(?:skala|level|score|skor|tingkat)\s*([1-9]|10)\b/i);
+  const explicitNum = scaleMatch ? parseFloat(scaleMatch[1]) : null;
+
+  // 7. stress_level (Tingkat Stres)
+  if (isUnset('stress_level')) {
+    const stressScaleMatch = textLower.match(/(?:stres|stress)\s*(?:skala|level|tingkat)?\s*([1-9]|10)\b/i);
+    if (stressScaleMatch) {
+      extracted.stress_level = parseFloat(stressScaleMatch[1]);
+    } else if (textLower.includes("stres") && explicitNum) {
+      extracted.stress_level = explicitNum;
+    } else if (textLower.includes("stres berat") || textLower.includes("stres banget") || textLower.includes("sangat stres") || textLower.includes("tertekan") || textLower.includes("parah banget") || textLower.includes("tidak kuat lagi") || textLower.includes("tidak sanggup") || textLower.includes("pusing berat")) {
+      extracted.stress_level = 9.0;
+    } else if (textLower.includes("stres") || textLower.includes("tertekan") || textLower.includes("pusing") || textLower.includes("capek") || textLower.includes("lelah") || textLower.includes("bebannya")) {
+      extracted.stress_level = 7.0;
+    } else if (textLower.includes("tidak stres") || textLower.includes("aman") || textLower.includes("santai") || textLower.includes("tenang") || textLower.includes("biasa aja")) {
+      extracted.stress_level = 2.0;
+    } else if (explicitNum) {
+      extracted.stress_level = explicitNum;
+    }
+  }
+
+  // 8. anxiety_score (Tingkat Kecemasan)
+  if (isUnset('anxiety_score')) {
+    const anxietyScaleMatch = textLower.match(/(?:anxiety|cemas|kecemasan|panik)\s*(?:skala|level|tingkat)?\s*([1-9]|10)\b/i);
+    if (anxietyScaleMatch) {
+      extracted.anxiety_score = parseFloat(anxietyScaleMatch[1]);
+    } else if ((textLower.includes("cemas") || textLower.includes("anxiety") || textLower.includes("panik")) && explicitNum) {
+      extracted.anxiety_score = explicitNum;
+    } else if (textLower.includes("cemas banget") || textLower.includes("panik banget") || textLower.includes("anxiety berat") || textLower.includes("takut banget") || textLower.includes("khawatir banget") || textLower.includes("hal negatif") || textLower.includes("negatif") || textLower.includes("gelisah banget") || textLower.includes("overthinking parah")) {
+      extracted.anxiety_score = 9.0;
+    } else if (textLower.includes("cemas") || textLower.includes("anxiety") || textLower.includes("panik") || textLower.includes("khawatir") || textLower.includes("overthinking") || textLower.includes("gelisah") || textLower.includes("takut")) {
+      extracted.anxiety_score = 7.0;
+    } else if (textLower.includes("tenang") || textLower.includes("tidak cemas") || textLower.includes("tidak khawatir") || textLower.includes("aman") || textLower.includes("santai")) {
+      extracted.anxiety_score = 2.0;
+    }
+  }
+
+  // 9. depression_score (Tingkat Depresi/Kesedihan)
+  if (isUnset('depression_score')) {
+    const depScaleMatch = textLower.match(/(?:depresi|kesedihan|sedih|depression)\s*(?:skala|level|tingkat)?\s*([1-9]|10)\b/i);
+    if (depScaleMatch) {
+      extracted.depression_score = parseFloat(depScaleMatch[1]);
+    } else if ((textLower.includes("depresi") || textLower.includes("sedih") || textLower.includes("putus asa")) && explicitNum) {
+      extracted.depression_score = explicitNum;
+    } else if (textLower.includes("menyerah") || textLower.includes("putus asa") || textLower.includes("ingin mati") || textLower.includes("tidak sanggup lagi") || textLower.includes("tidak kuat lagi") || textLower.includes("depresi berat") || textLower.includes("hampa") || textLower.includes("tidak berguna") || textLower.includes("tidak berharga") || textLower.includes("capek hidup") || textLower.includes("lelah hidup")) {
+      extracted.depression_score = 9.0;
+    } else if (textLower.includes("depresi") || textLower.includes("sedih banget") || textLower.includes("menangis") || textLower.includes("kecewa berat") || textLower.includes("lelah emosional") || textLower.includes("hancur") || textLower.includes("sakit hati")) {
+      extracted.depression_score = 8.0;
+    } else if (textLower.includes("sedih") || textLower.includes("kecewa") || textLower.includes("lelah") || textLower.includes("capek") || textLower.includes("kurang semangat") || textLower.includes("mager")) {
+      extracted.depression_score = 7.0;
+    } else if (textLower.includes("bahagia") || textLower.includes("senang") || textLower.includes("ceria") || textLower.includes("gembira") || textLower.includes("semangat")) {
+      extracted.depression_score = 2.0;
+    }
+  }
+
+  // 10. sleep_hours (Jam Tidur)
+  if (isUnset('sleep_hours')) {
+    // Toleran terhadap typo "wakru tidur" / "waktu tidur"
+    const sleepMatch = textLower.match(/(?:tidur|sleep|wakru|waktu)\s*(?:cuma|hanya|kurang lebih|dikit)?\s*([1-9]|1[0-2])\s*jam\b/i) || textLower.match(/\b([1-9]|1[0-2])\s*jam\s*(?:tidur|sleep)\b/i);
+    if (sleepMatch) {
+      extracted.sleep_hours = parseFloat(sleepMatch[1]);
+    } else if (textLower.includes("tidur sedikit") || textLower.includes("kurang tidur") || textLower.includes("begadang") || textLower.includes("insomnia") || textLower.includes("wakru tidur sedikit") || textLower.includes("waktu tidur sedikit") || textLower.includes("tidak bisa tidur") || textLower.includes("susah tidur") || textLower.includes("jam tidur dikit") || textLower.includes("kurang istirahat") || textLower.includes("tidur berantakan")) {
+      extracted.sleep_hours = 3.5;
+    } else if (textLower.includes("tidur cukup") || textLower.includes("tidur nyenyak") || textLower.includes("tidur teratur") || textLower.includes("nyenyak")) {
+      extracted.sleep_hours = 8.0;
+    }
+  }
+
+  // 11. physical_activity (Olahraga)
+  if (isUnset('physical_activity')) {
+    if (textLower.includes("jarang") || textLower.includes("tidak pernah") || textLower.includes("gapernah") || textLower.includes("mager") || textLower.includes("jarang olahraga") || textLower.includes("tidak olahraga") || textLower.includes("males olahraga")) {
+      extracted.physical_activity = 0.5;
+    } else if (textLower.includes("sering olahraga") || textLower.includes("tiap hari") || textLower.includes("rutin") || textLower.includes("gym") || textLower.includes("olahraga terus") || textLower.includes("jogging")) {
+      extracted.physical_activity = 5.0;
+    }
+  }
+
+  // 12. screen_time & internet_usage (Screen Time & Internet)
+  if (isUnset('screen_time')) {
+    const scrMatch = textLower.match(/(?:screen time|internet|hp|laptop)\s*([1-9]|1[0-9])\s*jam\b/i);
+    if (scrMatch) {
+      extracted.screen_time = parseFloat(scrMatch[1]);
+      extracted.internet_usage = parseFloat(scrMatch[1]);
+    } else if (textLower.includes("sering") || textLower.includes("lama") || textLower.includes("seharian") || textLower.includes("main hp terus") || textLower.includes("kecanduan hp") || textLower.includes("scroll terus") || textLower.includes("socmed terus")) {
+      extracted.screen_time = 9.5;
+      extracted.internet_usage = 9.5;
+    } else if (textLower.includes("jarang main hp") || textLower.includes("dikit") || textLower.includes("screen time rendah") || textLower.includes("batasi hp")) {
+      extracted.screen_time = 2.0;
+      extracted.internet_usage = 2.0;
+    }
+  }
+
+  // 13. social_support (Dukungan Sosial)
+  if (isUnset('social_support')) {
+    if (textLower.includes("banyak teman") || textLower.includes("didukung") || textLower.includes("selalu ada") || textLower.includes("keluarga suportif") || textLower.includes("pacar suportif") || textLower.includes("teman baik")) {
+      extracted.social_support = 8.5;
+    } else if (textLower.includes("kesepian") || textLower.includes("sendiri") || textLower.includes("gapunya teman") || textLower.includes("tidak didukung") || textLower.includes("tidak ada yang peduli") || textLower.includes("antisosial") || textLower.includes("dijauhi") || textLower.includes("broken home")) {
+      extracted.social_support = 2.5;
+    }
+  }
+
+  // 14. financial_stress (Tekanan Finansial)
+  if (isUnset('financial_stress')) {
+    const finScaleMatch = textLower.match(/(?:keuangan|finansial|ekonomi|financial)\s*(?:skala|level|tingkat)?\s*([1-9]|10)\b/i);
+    if (finScaleMatch) {
+      extracted.financial_stress = parseFloat(finScaleMatch[1]);
+    } else if (textLower.includes("ekonomi kurang") || textLower.includes("uang") || textLower.includes("biaya") || textLower.includes("finansial") || textLower.includes("mahal") || textLower.includes("miskin") || textLower.includes("susah bayar") || textLower.includes("utang") || textLower.includes("uang pas-pasan") || textLower.includes("kurang biaya") || textLower.includes("ekonomi") || textLower.includes("dana")) {
+      extracted.financial_stress = 8.5;
+    } else if (textLower.includes("aman") || textLower.includes("cukup") || textLower.includes("berkecukupan") || textLower.includes("tidak masalah keuangan") || textLower.includes("mampu")) {
+      extracted.financial_stress = 3.0;
+    }
+  }
+
+  // 15. family_expectation (Ekspektasi Keluarga)
+  if (isUnset('family_expectation')) {
+    const famScaleMatch = textLower.match(/(?:ekspektasi|tuntutan|family|keluarga)\s*(?:skala|level|tingkat)?\s*([1-9]|10)\b/i);
+    if (famScaleMatch) {
+      extracted.family_expectation = parseFloat(famScaleMatch[1]);
+    } else if (textLower.includes("tuntutan") || textLower.includes("ekspektasi") || textLower.includes("orang tua") || textLower.includes("harapan orang tua") || textLower.includes("harapan keluarga") || textLower.includes("ditekan keluarga") || textLower.includes("dibandingkan") || textLower.includes("membebani") || textLower.includes("dituntut")) {
+      extracted.family_expectation = 8.5;
+    } else if (textLower.includes("santai") || textLower.includes("bebas") || textLower.includes("tidak menuntut") || textLower.includes("suportif") || textLower.includes("pengertian")) {
+      extracted.family_expectation = 3.0;
+    }
+  }
+
+  return extracted;
+}
+
+
 function mapGender(genderStr) {
   if (!genderStr) return null;
   const g = genderStr.trim().toLowerCase();
@@ -291,6 +499,21 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
           }
         }
 
+        // PENGUAT HEURISTIK LOKAL: Pastikan tidak ada keluhan distress kualitatif yang terlewat
+        const localExtracted = extractFeaturesLocally(message, currentState);
+        for (const [k, v] of Object.entries(localExtracted)) {
+          if (cleanFeatures[k] === undefined || cleanFeatures[k] === null) {
+            cleanFeatures[k] = v;
+          } else {
+            // Berikan prioritas pada heuristik lokal jika mendeteksi nilai krisis/ekstrem
+            if (k === 'sleep_hours' && v < 5.0 && cleanFeatures[k] >= 5.0) {
+              cleanFeatures[k] = v;
+            } else if (['stress_level', 'anxiety_score', 'depression_score', 'financial_stress', 'family_expectation'].includes(k) && v >= 8.0 && cleanFeatures[k] < 7.0) {
+              cleanFeatures[k] = v;
+            }
+          }
+        }
+
         // Suntikkan gender & age jika belum ada di percakapan aktif
         if (userGender && hadNoGender) {
           cleanFeatures.gender = userGender;
@@ -342,6 +565,20 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
           data.extractedFeatures = {};
         }
 
+        // PENGUAT HEURISTIK LOKAL
+        const localExtracted = extractFeaturesLocally(message, currentState);
+        for (const [k, v] of Object.entries(localExtracted)) {
+          if (data.extractedFeatures[k] === undefined || data.extractedFeatures[k] === null) {
+            data.extractedFeatures[k] = v;
+          } else {
+            if (k === 'sleep_hours' && v < 5.0 && data.extractedFeatures[k] >= 5.0) {
+              data.extractedFeatures[k] = v;
+            } else if (['stress_level', 'anxiety_score', 'depression_score', 'financial_stress', 'family_expectation'].includes(k) && v >= 8.0 && data.extractedFeatures[k] < 7.0) {
+              data.extractedFeatures[k] = v;
+            }
+          }
+        }
+
         if (userGender && hadNoGender) {
           data.extractedFeatures.gender = userGender;
         }
@@ -388,22 +625,9 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
       // ----------------------------------------------------
       const reply = "Aku di sini untuk mendengarkan keluh kesahmu. Ceritakan saja apa yang sedang membebani pikiranmu secara santai ya. Jika kamu ingin menganalisis tingkat burnout atau stres secara detail, klik tombol **'🪄 Mulai Asesmen Kesehatan Mental'** di bawah obrolan agar aku bisa memandumu secara terarah. 💙";
 
-      // Ekstrak secara pasif jika tidak sengaja menyebutkan gender, umur, atau jam tidur
-      const textLower = message.toLowerCase();
-      if (textLower.includes('perempuan') || textLower.includes('cewek') || textLower.includes('wanita') || textLower.includes('female')) {
-        extracted.gender = 'Female';
-      } else if (textLower.includes('laki') || textLower.includes('cowok') || textLower.includes('pria') || textLower.includes('male')) {
-        extracted.gender = 'Male';
-      }
-
-      if (parsedNum && parsedNum > 10 && parsedNum < 100) {
-        extracted.age = parsedNum;
-      }
-
-      const sleepMatch = message.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
-      if (sleepMatch) {
-        extracted.sleep_hours = parseFloat(sleepMatch[1]);
-      }
+      // Ekstrak secara pasif menggunakan fungsi pembantu pintar terpusat
+      const localExtracted = extractFeaturesLocally(message, currentState);
+      Object.assign(extracted, localExtracted);
 
       // Perekaman pesan balasan AI ke database
       if (req.user && session_id) {
@@ -482,148 +706,7 @@ PENTING: Hanya balas dengan JSON murni dengan struktur:
 
     if (currentIncompleteGroup && !isStartTrigger) {
       // Jalankan parser ekstraksi mandiri berbasis pola teks untuk seluruh variabel di grup tema aktif
-      const textLower = message.toLowerCase();
-
-      // 1. Ekstrak academic_year jika kosong
-      if (!currentState || currentState.academic_year === null || currentState.academic_year === undefined) {
-        const yearMatch = message.match(/\b([1-4])\b/);
-        if (yearMatch) {
-          extracted.academic_year = parseInt(yearMatch[1]);
-        } else if (textLower.includes("pertama") || textLower.includes("maba") || textLower.includes("satu")) {
-          extracted.academic_year = 1;
-        } else if (textLower.includes("kedua") || textLower.includes("dua")) {
-          extracted.academic_year = 2;
-        } else if (textLower.includes("ketiga") || textLower.includes("tiga")) {
-          extracted.academic_year = 3;
-        } else if (textLower.includes("keempat") || textLower.includes("empat") || textLower.includes("akhir")) {
-          extracted.academic_year = 4;
-        }
-      }
-
-      // 2. Ekstrak study_hours_per_day
-      if (!currentState || currentState.study_hours_per_day === null || currentState.study_hours_per_day === undefined) {
-        const hoursMatch = message.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
-        if (hoursMatch) {
-          extracted.study_hours_per_day = parseFloat(hoursMatch[1]);
-        } else if (parsedNum && parsedNum >= 1 && parsedNum <= 12 && parsedNum !== extracted.academic_year && (!currentState || parsedNum !== currentState.academic_year)) {
-          extracted.study_hours_per_day = parsedNum;
-        }
-      }
-
-      // 3. Ekstrak exam_pressure
-      if (!currentState || currentState.exam_pressure === null || currentState.exam_pressure === undefined) {
-        const scoreMatch = message.match(/\b([1-9]|10)\b/);
-        if (textLower.includes("berat") || textLower.includes("stres") || textLower.includes("parah") || textLower.includes("tinggi") || textLower.includes("besar") || textLower.includes("pusing") || textLower.includes("capek")) {
-          extracted.exam_pressure = 8.0;
-        } else if (textLower.includes("santai") || textLower.includes("rendah") || textLower.includes("aman") || textLower.includes("lancar")) {
-          extracted.exam_pressure = 3.0;
-        } else if (scoreMatch) {
-          extracted.exam_pressure = parseFloat(scoreMatch[1]);
-        }
-      }
-
-      // 4. Ekstrak academic_performance
-      if (!currentState || currentState.academic_performance === null || currentState.academic_performance === undefined) {
-        const perfMatch = message.match(/\b([5-9][0-9]|100)\b/);
-        if (perfMatch) {
-          extracted.academic_performance = parseFloat(perfMatch[1]);
-        } else if (textLower.includes("bagus") || textLower.includes("tinggi") || textLower.includes("memuaskan") || textLower.includes("aman")) {
-          extracted.academic_performance = 85.0;
-        } else if (textLower.includes("buruk") || textLower.includes("turun") || textLower.includes("jelek") || textLower.includes("anjlok")) {
-          extracted.academic_performance = 55.0;
-        }
-      }
-
-      // 5. Ekstrak stress_level
-      if (!currentState || currentState.stress_level === null || currentState.stress_level === undefined) {
-        if (textLower.includes("stres berat") || textLower.includes("stres banget") || textLower.includes("sangat stres") || textLower.includes("parah")) {
-          extracted.stress_level = 8.0;
-        } else if (textLower.includes("tidak stres") || textLower.includes("aman") || textLower.includes("santai") || textLower.includes("tenang")) {
-          extracted.stress_level = 2.0;
-        } else if (parsedNum && parsedNum >= 1 && parsedNum <= 10) {
-          extracted.stress_level = parsedNum;
-        }
-      }
-
-      // 6. Ekstrak anxiety_score
-      if (!currentState || currentState.anxiety_score === null || currentState.anxiety_score === undefined) {
-        if (textLower.includes("cemas banget") || textLower.includes("panik") || textLower.includes("anxiety") || textLower.includes("takut banget")) {
-          extracted.anxiety_score = 8.0;
-        } else if (textLower.includes("tenang") || textLower.includes("tidak cemas")) {
-          extracted.anxiety_score = 2.0;
-        } else if (parsedNum && parsedNum >= 1 && parsedNum <= 10) {
-          extracted.anxiety_score = parsedNum;
-        }
-      }
-
-      // 7. Ekstrak depression_score
-      if (!currentState || currentState.depression_score === null || currentState.depression_score === undefined) {
-        if (textLower.includes("depresi") || textLower.includes("sedih banget") || textLower.includes("putus asa") || textLower.includes("menangis")) {
-          extracted.depression_score = 8.0;
-        } else if (textLower.includes("bahagia") || textLower.includes("senang") || textLower.includes("ceria")) {
-          extracted.depression_score = 2.0;
-        } else if (parsedNum && parsedNum >= 1 && parsedNum <= 10) {
-          extracted.depression_score = parsedNum;
-        }
-      }
-
-      // 8. Ekstrak sleep_hours
-      if (!currentState || currentState.sleep_hours === null || currentState.sleep_hours === undefined) {
-        const sleepMatch = message.match(/\b([1-9]|1[0-2])\s*(jam|hours)\b/i);
-        if (sleepMatch) {
-          extracted.sleep_hours = parseFloat(sleepMatch[1]);
-        } else if (parsedNum && parsedNum >= 1 && parsedNum <= 12) {
-          extracted.sleep_hours = parsedNum;
-        }
-      }
-
-      // 9. Ekstrak physical_activity
-      if (!currentState || currentState.physical_activity === null || currentState.physical_activity === undefined) {
-        if (textLower.includes("jarang") || textLower.includes("tidak pernah") || textLower.includes("gapernah") || textLower.includes("mager")) {
-          extracted.physical_activity = 0.5;
-        } else if (textLower.includes("sering") || textLower.includes("tiap hari") || textLower.includes("rutin")) {
-          extracted.physical_activity = 5.0;
-        }
-      }
-
-      // 10. Ekstrak screen_time & internet_usage
-      if (!currentState || currentState.screen_time === null || currentState.screen_time === undefined) {
-        const scrMatch = message.match(/\b([1-9]|1[0-9])\s*(jam|hours)\b/i);
-        if (scrMatch) {
-          extracted.screen_time = parseFloat(scrMatch[1]);
-          extracted.internet_usage = parseFloat(scrMatch[1]);
-        } else if (textLower.includes("sering") || textLower.includes("lama") || textLower.includes("seharian")) {
-          extracted.screen_time = 9.0;
-          extracted.internet_usage = 9.0;
-        }
-      }
-
-      // 11. Ekstrak social_support
-      if (!currentState || currentState.social_support === null || currentState.social_support === undefined) {
-        if (textLower.includes("banyak teman") || textLower.includes("didukung") || textLower.includes("selalu ada")) {
-          extracted.social_support = 8.0;
-        } else if (textLower.includes("kesepian") || textLower.includes("sendiri") || textLower.includes("gapunya teman")) {
-          extracted.social_support = 3.0;
-        }
-      }
-
-      // 12. Ekstrak financial_stress
-      if (!currentState || currentState.financial_stress === null || currentState.financial_stress === undefined) {
-        if (textLower.includes("uang") || textLower.includes("biaya") || textLower.includes("finansial") || textLower.includes("mahal") || textLower.includes("miskin") || textLower.includes("susah bayar")) {
-          extracted.financial_stress = 8.0;
-        } else if (textLower.includes("aman") || textLower.includes("cukup") || textLower.includes("tidak masalah")) {
-          extracted.financial_stress = 3.0;
-        }
-      }
-
-      // 13. Ekstrak family_expectation
-      if (!currentState || currentState.family_expectation === null || currentState.family_expectation === undefined) {
-        if (textLower.includes("tuntutan") || textLower.includes("ekspektasi") || textLower.includes("orang tua") || textLower.includes("harapan keluarga")) {
-          extracted.family_expectation = 8.0;
-        } else if (textLower.includes("santai") || textLower.includes("bebas") || textLower.includes("tidak menuntut")) {
-          extracted.family_expectation = 3.0;
-        }
-      }
+      extracted = extractFeaturesLocally(message, currentState);
     }
 
     // Gabungkan dengan currentState untuk mencari variabel tidak lengkap berikutnya
