@@ -182,7 +182,7 @@ function extractFeaturesLocally(message, currentState) {
       extracted.stress_level = parseFloat(stressScaleMatch[1]);
     } else if (textLower.includes("stres") && explicitNum) {
       extracted.stress_level = explicitNum;
-    } else if (textLower.includes("stres berat") || textLower.includes("stres banget") || textLower.includes("sangat stres") || textLower.includes("tertekan") || textLower.includes("parah banget") || textLower.includes("tidak kuat lagi") || textLower.includes("tidak sanggup") || textLower.includes("pusing berat")) {
+    } else if (textLower.includes("stres berat") || textLower.includes("stres banget") || textLower.includes("sangat stres") || textLower.includes("tertekan") || textLower.includes("parah banget") || textLower.includes("tidak kuat lagi") || textLower.includes("tidak sanggup") || textLower.includes("pusing berat") || textLower.includes("bikin tertekan") || textLower.includes("sangat tertekan") || textLower.includes("tertekan sekali")) {
       extracted.stress_level = 9.0;
     } else if (textLower.includes("stres") || textLower.includes("tertekan") || textLower.includes("pusing") || textLower.includes("capek") || textLower.includes("lelah") || textLower.includes("bebannya")) {
       extracted.stress_level = 7.0;
@@ -200,7 +200,7 @@ function extractFeaturesLocally(message, currentState) {
       extracted.anxiety_score = parseFloat(anxietyScaleMatch[1]);
     } else if ((textLower.includes("cemas") || textLower.includes("anxiety") || textLower.includes("panik")) && explicitNum) {
       extracted.anxiety_score = explicitNum;
-    } else if (textLower.includes("cemas banget") || textLower.includes("panik banget") || textLower.includes("anxiety berat") || textLower.includes("takut banget") || textLower.includes("khawatir banget") || textLower.includes("hal negatif") || textLower.includes("negatif") || textLower.includes("gelisah banget") || textLower.includes("overthinking parah")) {
+    } else if (textLower.includes("cemas banget") || textLower.includes("panik banget") || textLower.includes("anxiety berat") || textLower.includes("takut banget") || textLower.includes("khawatir banget") || textLower.includes("hal negatif") || textLower.includes("negatif") || textLower.includes("gelisah banget") || textLower.includes("overthinking parah") || textLower.includes("sangat cemas") || textLower.includes("sangat merasa cemas") || textLower.includes("cemas sekali") || textLower.includes("sangat khawatir")) {
       extracted.anxiety_score = 9.0;
     } else if (textLower.includes("cemas") || textLower.includes("anxiety") || textLower.includes("panik") || textLower.includes("khawatir") || textLower.includes("overthinking") || textLower.includes("gelisah") || textLower.includes("takut")) {
       extracted.anxiety_score = 7.0;
@@ -216,9 +216,9 @@ function extractFeaturesLocally(message, currentState) {
       extracted.depression_score = parseFloat(depScaleMatch[1]);
     } else if ((textLower.includes("depresi") || textLower.includes("sedih") || textLower.includes("putus asa")) && explicitNum) {
       extracted.depression_score = explicitNum;
-    } else if (textLower.includes("menyerah") || textLower.includes("putus asa") || textLower.includes("ingin mati") || textLower.includes("tidak sanggup lagi") || textLower.includes("tidak kuat lagi") || textLower.includes("depresi berat") || textLower.includes("hampa") || textLower.includes("tidak berguna") || textLower.includes("tidak berharga") || textLower.includes("capek hidup") || textLower.includes("lelah hidup")) {
+    } else if (textLower.includes("menyerah") || textLower.includes("putus asa") || textLower.includes("ingin mati") || textLower.includes("tidak sanggup lagi") || textLower.includes("tidak kuat lagi") || textLower.includes("depresi berat") || textLower.includes("hampa") || textLower.includes("tidak berguna") || textLower.includes("tidak berharga") || textLower.includes("capek hidup") || textLower.includes("lelah hidup") || textLower.includes("ingin menyerah") || textLower.includes("seakan ingin menyerah")) {
       extracted.depression_score = 9.0;
-    } else if (textLower.includes("depresi") || textLower.includes("sedih banget") || textLower.includes("menangis") || textLower.includes("kecewa berat") || textLower.includes("lelah emosional") || textLower.includes("hancur") || textLower.includes("sakit hati")) {
+    } else if (textLower.includes("depresi") || textLower.includes("sedih banget") || textLower.includes("menangis") || textLower.includes("kecewa berat") || textLower.includes("lelah emosional") || textLower.includes("hancur") || textLower.includes("sakit hati") || textLower.includes("tidak terlalu minat") || textLower.includes("tidak minat") || textLower.includes("kurang minat")) {
       extracted.depression_score = 8.0;
     } else if (textLower.includes("sedih") || textLower.includes("kecewa") || textLower.includes("lelah") || textLower.includes("capek") || textLower.includes("kurang semangat") || textLower.includes("mager")) {
       extracted.depression_score = 7.0;
@@ -233,7 +233,7 @@ function extractFeaturesLocally(message, currentState) {
     const sleepMatch = textLower.match(/(?:tidur|sleep|wakru|waktu)\s*(?:cuma|hanya|kurang lebih|dikit)?\s*([1-9]|1[0-2])\s*jam\b/i) || textLower.match(/\b([1-9]|1[0-2])\s*jam\s*(?:tidur|sleep)\b/i);
     if (sleepMatch) {
       extracted.sleep_hours = parseFloat(sleepMatch[1]);
-    } else if (textLower.includes("tidur sedikit") || textLower.includes("kurang tidur") || textLower.includes("begadang") || textLower.includes("insomnia") || textLower.includes("wakru tidur sedikit") || textLower.includes("waktu tidur sedikit") || textLower.includes("tidak bisa tidur") || textLower.includes("susah tidur") || textLower.includes("jam tidur dikit") || textLower.includes("kurang istirahat") || textLower.includes("tidur berantakan")) {
+    } else if (textLower.includes("tidur sedikit") || textLower.includes("kurang tidur") || textLower.includes("begadang") || textLower.includes("insomnia") || textLower.includes("wakru tidur sedikit") || textLower.includes("waktu tidur sedikit") || textLower.includes("tidak bisa tidur") || textLower.includes("susah tidur") || textLower.includes("jam tidur dikit") || textLower.includes("kurang istirahat") || textLower.includes("tidur berantakan") || textLower.includes("tidak cukup") || textLower.includes("tak cukup") || textLower.includes("kurang tidur")) {
       extracted.sleep_hours = 3.5;
     } else if (textLower.includes("tidur cukup") || textLower.includes("tidur nyenyak") || textLower.includes("tidur teratur") || textLower.includes("nyenyak")) {
       extracted.sleep_hours = 8.0;
@@ -1022,17 +1022,12 @@ exports.predictHealth = async (req, res) => {
   const averageScore = (stress + anxiety + depression) / 3;
 
   let riskLevel = 'Low';
-  if (stress >= 8.0 || anxiety >= 8.0 || depression >= 8.0 || averageScore >= 7) {
+  if (averageScore >= 7) {
     riskLevel = 'High';
   } else if (averageScore >= 4) {
     riskLevel = 'Medium';
   }
-  
-  let burnoutScore = Math.min(10, Math.max(0, parseFloat((averageScore * 1.1).toFixed(1))));
-  if (stress >= 8.0 || anxiety >= 8.0 || depression >= 8.0) {
-    const maxCore = Math.max(stress, anxiety, depression);
-    burnoutScore = Math.max(burnoutScore, parseFloat((maxCore * 0.95).toFixed(1)));
-  }
+  const burnoutScore = Math.min(10, Math.max(0, parseFloat((averageScore * 1.1).toFixed(1))));
 
   // 3. Panggil AI untuk memberikan rekomendasi hangat jika ada key
   let recommendation = "Keadaan emosionalmu tampak cukup stabil. Tetap pertahankan pola hidup seimbang dan luangkan waktu untuk relaksasi ya.";
