@@ -1027,10 +1027,22 @@ exports.predictHealth = async (req, res) => {
   } else if (averageScore >= 4) {
     riskLevel = 'Medium';
   }
-  const burnoutScore = Math.min(10, Math.max(0, parseFloat((averageScore * 1.1).toFixed(1))));
+  let burnoutScore = Math.min(10, Math.max(0, parseFloat((averageScore * 1.1).toFixed(1))));
+
+  // === PENGAMAN RISIKO KRISIS (SAFETY OVERWRITE ALIGNED WITH ML API) ===
+  if (stress >= 8.0 || anxiety >= 8.0 || depression >= 8.0) {
+    riskLevel = 'High';
+    const maxCore = Math.max(stress, anxiety, depression);
+    burnoutScore = Math.max(burnoutScore, parseFloat((maxCore * 0.95).toFixed(1)));
+  }
 
   // 3. Panggil AI untuk memberikan rekomendasi hangat jika ada key
   let recommendation = "Keadaan emosionalmu tampak cukup stabil. Tetap pertahankan pola hidup seimbang dan luangkan waktu untuk relaksasi ya.";
+  if (riskLevel === 'High') {
+    recommendation = "Kamu terdeteksi sedang berada di bawah tekanan mental yang sangat tinggi. Sangat disarankan untuk beristirahat sejenak, melakukan teknik pernapasan dalam, dan berbicara dengan konselor atau orang terdekat untuk meredakan kecemasanmu.";
+  } else if (riskLevel === 'Medium') {
+    recommendation = "Ada beberapa tanda kelelahan emosional sedang. Cobalah untuk membagi waktu dengan lebih seimbang antara belajar dan bersantai, serta beristirahatlah yang cukup.";
+  }
   try {
     if ((process.env.GEMINI_API_KEY && GoogleGenAI) || (process.env.GROQ_API_KEY && Groq)) {
       const levelMap = { 'High': 'tinggi', 'Medium': 'sedang', 'Low': 'rendah' };

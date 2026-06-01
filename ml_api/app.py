@@ -478,7 +478,12 @@ def predict(data: HealthData):
         )
         ai_recommendation = chat_completion.choices[0].message.content.strip()
     except Exception as e:
-        ai_recommendation = "Apa pun yang sedang kamu hadapi, kamu sudah sangat berani dengan membagikannya. Jaga dirimu baik-baik ya, satu langkah kecil hari ini sudah cukup."
+        if risk_level == "High":
+            ai_recommendation = "Kamu terdeteksi sedang berada di bawah tekanan mental yang sangat tinggi. Sangat disarankan untuk beristirahat sejenak, melakukan teknik pernapasan dalam, dan berbicara dengan konselor atau orang terdekat untuk meredakan kecemasanmu."
+        elif risk_level == "Medium":
+            ai_recommendation = "Ada beberapa tanda kelelahan emosional sedang. Cobalah untuk membagi waktu dengan lebih seimbang antara belajar dan bersantai, serta beristirahatlah yang cukup."
+        else:
+            ai_recommendation = "Keadaan emosionalmu tampak cukup stabil. Tetap pertahankan pola hidup seimbang dan luangkan waktu untuk relaksasi ya."
     
     return {
         "risk_level": risk_level,
